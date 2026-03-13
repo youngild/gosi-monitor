@@ -1,7 +1,7 @@
 """
-고시 내용 요약
-- ANTHROPIC_API_KEY 환경변수가 있으면 Claude API 사용 (고품질)
-- 없으면 로컬 패턴 추출 방식 사용 (API 키 불필요)
+고시 내용 요약 — 의사랑 EMR 적용 이슈 기준
+- ANTHROPIC_API_KEY 환경변수가 있으면 Claude API (고품질)
+- 없으면 로컬 규칙 기반 추출 (API 키 불필요)
 """
 import os
 import re
@@ -12,13 +12,15 @@ import pdfplumber
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
 
-# ── 텍스트 추출 ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════
+#  텍스트 추출
+# ══════════════════════════════════════════════════════
 
 def extract_text_from_pdf(file_path: str) -> str:
     text = []
     try:
         with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages[:30]:
+            for page in pdf.pages[:40]:
                 t = page.extract_text()
                 if t:
                     text.append(t)
@@ -38,8 +40,7 @@ def extract_text_from_hwpx(file_path: str) -> str:
                 with z.open(name) as f:
                     try:
                         tree = ET.parse(f)
-                        root = tree.getroot()
-                        for elem in root.iter():
+                        for elem in tree.getroot().iter():
                             if elem.text and elem.text.strip():
                                 texts.append(elem.text.strip())
                             if elem.tail and elem.tail.strip():
@@ -57,212 +58,264 @@ def extract_text_from_file(file_path: str) -> str:
         return extract_text_from_pdf(file_path)
     elif ext == 'hwpx':
         return extract_text_from_hwpx(file_path)
-    elif ext == 'hwp':
-        return ''
     elif ext == 'txt':
         with open(file_path, encoding='utf-8', errors='ignore') as f:
             return f.read()
     return ''
 
 
-# ── 로컬 패턴 기반 요약 ──────────────────────────────────────
+# ══════════════════════════════════════════════════════
+#  텍스트 정제
+# ══════════════════════════════════════════════════════
 
-def _find_section(text: str, *headers: str, max_len: int = 300) -> str:
+def _clean(text: str) -> str:
+    text = re.sub(r'\(cid:\d+\)', '', text)
+    text = re.sub(r'발\s*간\s*등\s*록\s*번\s*호[^\n]*', '', text)
+    text = re.sub(r'[ \t]{2,}', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+# ══════════════════════════════════════════════════════
+#  섹션 추출 (번호 접두어 포함 지원)
+# ══════════════════════════════════════════════════════
+
+def _extract_section(text: str, *keywords: str, max_chars: int = 600) -> str:
     """
-    헤더 키워드 이후의 산문 텍스트를 추출한다.
-    여러 줄에 걸쳐 있을 수 있으므로 단락 단위로 수집.
+    '1. 개정이유', '가. 주요내용' 등 번호 접두어가 붙은 헤더도 인식.
+    헤더 이후 내용을 최대 max_chars 글자까지 수집.
     """
-    for header in headers:
-        m = re.search(
-            rf'(?:^|\n)\s*{header}\s*[：:\n]?\s*(.{{10,}})',
-            text, re.MULTILINE
-        )
-        if m:
-            chunk = m.group(1).strip()
-            # 다음 섹션 헤더까지 수집
-            lines = [chunk]
-            rest = text[m.end():]
-            for line in rest.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                # 다음 헤더가 나오면 중단
-                if re.match(r'^(?:\d+\.|가\.|나\.|다\.|○|■|▶|※|Ⅰ|Ⅱ|붙임|부칙|별표|별첨)', stripped):
-                    break
-                lines.append(stripped)
-                if sum(len(l) for l in lines) >= max_len:
-                    break
-            result = ' '.join(lines)[:max_len]
-            # 너무 짧으면 skip
-            if len(re.findall(r'[가-힣]', result)) >= 10:
-                return result
-    return ''
+    pattern = (
+        r'(?:^|\n)'                          # 줄 시작
+        r'[ \t]*(?:\d+\.|[가-힣]\.|[①-⑳])?' # 선택적 번호
+        r'[ \t]*(?:' + '|'.join(keywords) + r')'
+        r'[ \t]*[：:\.]?\s*\n?'
+        r'([\s\S]{10,})'
+    )
+    m = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
+    if not m:
+        return ''
+
+    raw = m.group(1)
+    lines = []
+    total = 0
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        # 다음 섹션 헤더가 나오면 중단
+        if re.match(
+            r'^(?:\d+\.|[가-힣]\.|[①-⑳]|○|■|▶|※|제\d+조|붙임|부칙|별표|별첨|참고|합\s*의|예산)',
+            s
+        ):
+            if lines:  # 첫 줄이 아닌 경우만 중단
+                break
+        lines.append(s)
+        total += len(s)
+        if total >= max_chars:
+            break
+
+    result = ' '.join(lines).strip()
+    # 한글이 충분히 있어야 유효
+    if len(re.findall(r'[가-힣]', result)) < 10:
+        return ''
+    return result[:max_chars]
 
 
-def _find_date(text: str) -> str:
-    """시행일 패턴 탐색."""
+def _extract_date(text: str) -> str:
     patterns = [
-        r'이\s*(?:규정|고시|지침|훈령|예규)은?\s*([\d]{4}년\s*\d+월\s*\d+일)(?:부터)?\s*시행',
-        r'시행일\s*[：:]\s*([^\n.]{5,50})',
+        r'이\s*(?:규정|고시|지침|훈령|예규)은?\s*([\d]{4}년\s*\d+월\s*\d+일)\s*부터?\s*시행',
+        r'시행일\s*[：:]\s*([^\n]{5,60})',
         r'(\d{4}년\s*\d+월\s*\d+일)\s*부터\s*시행',
+        r'공포한?\s*날부터\s*시행',
         r'공포일부터\s*시행',
     ]
-    for pat in patterns:
-        m = re.search(pat, text)
+    for p in patterns:
+        m = re.search(p, text)
         if m:
-            return m.group(0 if '공포일' in pat else 1).strip()[:60]
+            g = m.group(0) if '공포' in p else m.group(1)
+            return g.strip()[:80]
     return ''
 
 
-def _is_clean(text: str, min_korean: int = 8) -> bool:
-    """비교표·표 잔재가 없는 깨끗한 산문인지 확인."""
-    korean = len(re.findall(r'[가-힣]', text))
-    if korean < min_korean:
-        return False
-    # 비교표 잔재 패턴 (구 내용 / 개정 내용이 반복)
-    if re.search(r'기존\s*내용|구\s*내용|신\s*구\s*조', text):
-        return False
-    return True
+def _extract_target(text: str) -> str:
+    return _extract_section(
+        text,
+        r'적용\s*대상', r'지원\s*대상', r'대상\s*기관', r'이용\s*대상',
+        max_chars=150
+    )
 
 
-def _title_based_desc(title: str) -> str:
-    """제목을 분석해 문서 유형 설명 생성."""
-    clean = re.sub(r'새글|\[.*?\]', '', title).strip()
-    clean = re.sub(r'「|」|\'|\'', '', clean).strip()
+# ══════════════════════════════════════════════════════
+#  EMR 영향 분석 (키워드 기반)
+# ══════════════════════════════════════════════════════
 
-    if '일부개정' in title or '전부개정' in title:
-        kind = '일부개정' if '일부개정' in title else '전부개정'
-        return f"고시 {kind} 문서입니다.\n대상: {clean[:60]}"
-    if '폐지' in title:
-        return f"고시 폐지 문서입니다.\n대상: {clean[:60]}"
-    if '제정' in title:
-        return f"신규 제정 고시입니다.\n대상: {clean[:60]}"
-    if '사업안내' in title or '지침' in title or '매뉴얼' in title:
-        return f"사업 안내/지침 문서입니다.\n내용: {clean[:80]}"
-    if '급여중지' in title:
-        return f"보험급여 등재 약제 급여중지 안내 문서입니다.\n대상 업체: {clean[clean.rfind('(')+1:clean.rfind(')')]}"
-    if '해제' in title:
-        return f"급여중지 해제 안내 문서입니다.\n대상: {clean[:60]}"
-    return clean[:100]
+# (키워드, EMR 영향 설명, 모듈)
+EMR_IMPACT_RULES = [
+    (r'수가|행위\s*코드|급여\s*기준|비급여',  '수가코드·급여기준 변경 → 수가 테이블 업데이트 필요', '청구/수납'),
+    (r'처방전|처방\s*전달|처방\s*코드',       '처방 관련 변경 → 처방 모듈 검토 필요', '처방'),
+    (r'의약품|약품\s*코드|급여\s*중지|급여\s*중지\s*해제', '의약품 코드·급여 변동 → 약품 마스터 업데이트', '처방/약품'),
+    (r'서식|기재\s*항목|필수\s*입력|진료\s*기록|의무\s*기록', '서식·필수 기재항목 변경 → 화면·서식 수정 필요', '의무기록'),
+    (r'전자\s*바우처|바우처\s*결제|전자\s*청구',  '전자바우처 처리 절차 변경 → 수납/청구 연동 확인', '수납/청구'),
+    (r'청구|심사\s*청구|요양\s*급여\s*비용',     '청구 방식·코드 변경 → 청구 모듈 검토 필요', '청구'),
+    (r'신고|통보\s*의무|보고\s*의무',            '신고·통보 의무 추가·변경 → 신고 기능 확인', '신고/보고'),
+    (r'인터페이스|연동|API|표준\s*코드',         '시스템 연동·인터페이스 변경 가능성', '연동'),
+    (r'동의서|설명문|동의\s*서식',               '동의서 서식 변경 → 동의서 모듈 확인', '동의서'),
+    (r'원무|수납|납부',                          '원무·수납 프로세스 변경 가능성', '원무/수납'),
+]
 
+
+def _analyze_emr_impact(text: str) -> list[str]:
+    """텍스트에서 EMR 영향 키워드를 찾아 이슈 목록 반환."""
+    hits = []
+    seen_modules = set()
+    for pattern, message, module in EMR_IMPACT_RULES:
+        if re.search(pattern, text) and module not in seen_modules:
+            hits.append(f"• [{module}] {message}")
+            seen_modules.add(module)
+    return hits
+
+
+# ══════════════════════════════════════════════════════
+#  로컬 요약 (EMR 이슈 기준)
+# ══════════════════════════════════════════════════════
 
 def _local_summarize(title: str, content: str) -> str:
-    """문서 전체를 스캔해 신뢰도 높은 정보만 추출."""
+    text = _clean(content)
+    if len(text) < 50:
+        return "[텍스트 내용이 너무 짧아 요약할 수 없습니다]"
 
-    # 전처리
-    text = re.sub(r'\(cid:\d+\)', '', content)
-    text = re.sub(r'[ \t]{2,}', ' ', text)
-
-    lines = []
+    sections = []
 
     # ① 개정이유 / 제정이유
-    reason = _find_section(text, r'개정\s*이유', r'제정\s*이유', max_len=300)
-    if reason and _is_clean(reason):
-        lines.append(f"📌 **개정이유**\n{reason}")
+    reason = _extract_section(text, r'개정\s*이유', r'제정\s*이유', max_chars=400)
+    if reason:
+        sections.append(f"📌 개정이유\n{reason}")
 
     # ② 주요내용
-    main = _find_section(text, r'주요\s*내용', r'개정\s*주요내용', max_len=350)
-    if main and _is_clean(main):
-        lines.append(f"📋 **주요내용**\n{main}")
+    main = _extract_section(text, r'주요\s*내용', r'개정\s*주요내용', max_chars=500)
+    if main:
+        sections.append(f"📋 주요내용\n{main}")
 
-    # ③ 시행일 (항상 신뢰도 높음)
-    date = _find_date(text)
-    if date:
-        lines.append(f"📅 **시행일**\n{date}")
+    # ③ 목적 (개정이유·주요내용 없는 지침류)
+    if not reason and not main:
+        purpose = _extract_section(text, r'목\s*적', r'사업\s*목적', r'추진\s*배경', max_chars=300)
+        if purpose:
+            sections.append(f"🎯 목적 / 추진배경\n{purpose}")
 
-    # ④ 목적 (개정이유·주요내용 없는 경우)
-    if not lines:
-        purpose = _find_section(text, r'목\s*적', r'사업\s*목적', max_len=200)
-        if purpose and _is_clean(purpose):
-            lines.append(f"🎯 **목적**\n{purpose}")
-
-    # 아직도 없으면 제목 기반 설명
-    if not lines:
-        lines.append(f"📄 **문서 유형**\n{_title_based_desc(title)}")
-
-    # EMR 적용 관련 키워드가 본문에 있으면 추출
-    emr_hits = []
-    emr_keywords = {
-        '수가': '수가코드 변경 가능성 — 청구 모듈 확인 필요',
-        '청구': '청구 관련 변경 — 청구 모듈 검토 필요',
-        '처방': '처방 관련 변경 — 처방 모듈 검토 필요',
-        '서식': '서식 변경 — EMR 입력 화면 수정 필요',
-        '기재': '기재 항목 변경 — 입력 양식 수정 필요',
-        '전산': '전산 시스템 변경 요구 가능성',
-        '코드': '코드 체계 변경 — 코드 테이블 업데이트 필요',
-        '인터페이스': '인터페이스 변경 — 연동 시스템 확인 필요',
-        '신고': '신고 관련 — 관련 신고 기능 확인 필요',
-    }
-    for kw, msg in emr_keywords.items():
-        if kw in text:
-            emr_hits.append(f"• {msg}")
+    # ④ EMR 영향 분석
+    emr_hits = _analyze_emr_impact(text)
     if emr_hits:
-        lines.append("🏥 **EMR 검토 포인트** (키워드 감지)\n" + '\n'.join(emr_hits[:4]))
+        sections.append("🏥 EMR 적용 검토 항목\n" + '\n'.join(emr_hits))
+    else:
+        sections.append("🏥 EMR 적용 검토 항목\n• 직접적인 EMR 시스템 변경 키워드 미감지\n• 원문 확인 후 업무 프로세스 변경 여부 확인 권장")
 
-    lines.append("ℹ️ *Claude API 키를 설정하면 EMR 적용사항을 상세히 분석합니다.*")
+    # ⑤ 시행일
+    date = _extract_date(text)
+    if date:
+        sections.append(f"📅 시행일\n{date}")
 
-    return '\n\n'.join(lines)
+    # ⑥ 적용 대상
+    target = _extract_target(text)
+    if target:
+        sections.append(f"👥 적용 대상\n{target}")
+
+    # 아무것도 못 찾은 경우
+    if len(sections) <= 1:  # EMR 항목만 있는 경우
+        sections.insert(0,
+            f"📄 문서 유형\n{_doc_type_desc(title)}\n\n"
+            "⚠️ 이 문서는 비교표·목록 형식으로 자동 추출이 어렵습니다.\n"
+            "첨부파일 원문을 직접 확인하세요."
+        )
+
+    sections.append(
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "ℹ️ ANTHROPIC_API_KEY 설정 시 Claude AI가 EMR 적용 사항을 상세 분석합니다."
+    )
+
+    return '\n\n'.join(sections)
 
 
-# ── Claude API 요약 ──────────────────────────────────────────
+def _doc_type_desc(title: str) -> str:
+    t = re.sub(r'새글|\[.*?\]|「|」', '', title).strip()
+    if '일부개정' in title:  return f'고시 일부개정 — {t[:60]}'
+    if '전부개정' in title:  return f'고시 전부개정 — {t[:60]}'
+    if '제정' in title:       return f'신규 제정 고시 — {t[:60]}'
+    if '폐지' in title:       return f'고시 폐지 — {t[:60]}'
+    if '급여중지' in title:   return f'보험급여 급여중지 안내 — {t[:60]}'
+    if '해제' in title:       return f'급여중지 해제 안내 — {t[:60]}'
+    return t[:80]
+
+
+# ══════════════════════════════════════════════════════
+#  Claude API 요약 (EMR PM 전용 프롬프트)
+# ══════════════════════════════════════════════════════
 
 def _claude_summarize(title: str, content: str, api_key: str) -> str:
     import anthropic
 
-    text = re.sub(r'\(cid:\d+\)', '', content)
-    if len(text) > 10000:
-        text = text[:7000] + "\n\n...(중략)...\n\n" + text[-2000:]
+    text = _clean(content)
+    if len(text) > 12000:
+        text = text[:8000] + '\n\n...(중략)...\n\n' + text[-3000:]
 
-    client = anthropic.Anthropic(api_key=api_key)
     prompt = f"""당신은 "의사랑" EMR(전자의무기록) 시스템의 PM입니다.
-아래 보건의료 고시/지침 문서를 읽고, EMR 제품 운영·개발 관점에서 실무적으로 정리해 주세요.
+아래 보건의료 고시/지침 문서를 분석하여, **EMR 제품에 적용해야 하는 이슈** 중심으로 정리하세요.
+없는 항목은 반드시 생략하고, 있는 항목만 간결하게 작성하세요.
 
 제목: {title}
 
-내용:
+문서 내용:
 {text}
 
-다음 항목 중 해당하는 것만 작성하세요 (없으면 생략):
+---
+## 출력 형식 (해당 항목만 작성)
 
-📌 **개정이유 / 배경** (1~2줄)
+📌 개정이유
+(한 줄로 핵심만)
 
-📋 **EMR 적용 필요 사항**
-- (수가코드·청구코드 변경이 있으면 명시)
-- (입력 서식·필수 항목 변경이 있으면 명시)
-- (기능 추가·수정이 필요한 모듈 명시: 처방/수납/청구/기록 등)
-- (데이터 연동·인터페이스 변경 필요 여부)
+📋 주요 변경 내용
+- (변경사항 bullet)
 
-⚠️ **주의사항 / 리스크**
-- (미적용 시 청구 오류·법적 문제 등)
+🏥 EMR 적용 필요 사항
+- [모듈명] 변경 내용 및 조치 사항
+  예) [청구] 수가코드 XXX 신설 → 청구 코드 테이블 추가
+      [처방] 처방 서식 필수항목 변경 → 입력화면 수정
+      [의무기록] 기재 의무 항목 추가
+      [수납] 바우처 처리 방식 변경
 
-📅 **시행일 및 대응 기한**
-- (언제까지 EMR에 반영해야 하는지)
+⚠️ 미적용 시 위험
+- (청구 오류, 법적 의무 위반 등 구체적 위험)
 
-👥 **적용 대상 기관**
-- (어떤 의료기관이 해당되는지)"""
+📅 시행일 / 대응 기한
+- (날짜 및 EMR 반영 기한)
+
+👥 적용 대상 기관
+- (해당 의료기관 유형)"""
 
     try:
-        message = client.messages.create(
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=1000,
+            max_tokens=1200,
             messages=[{"role": "user", "content": prompt}]
         )
-        return message.content[0].text
+        return msg.content[0].text
     except Exception as e:
         return f"[Claude 오류: {e}]"
 
 
-# ── 공개 인터페이스 ──────────────────────────────────────────
+# ══════════════════════════════════════════════════════
+#  공개 인터페이스
+# ══════════════════════════════════════════════════════
 
 def summarize(title: str, content: str) -> str:
-    """API 키가 있으면 Claude, 없으면 로컬 패턴 추출로 요약."""
     if not content or not content.strip():
-        return "[텍스트를 추출할 수 없습니다]"
+        return "[첨부파일에서 텍스트를 추출할 수 없습니다]"
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if api_key:
-        print("    (Claude API 사용)")
+        print("    (Claude API - EMR 분석)")
         return _claude_summarize(title, content, api_key)
     else:
-        print("    (로컬 패턴 추출)")
+        print("    (로컬 규칙 기반 - EMR 이슈 추출)")
         return _local_summarize(title, content)
