@@ -3,205 +3,224 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>고시 통합 분석 시스템</title>
+  <title>고시 통합 분석 — 의사랑 EMR</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
   <style>
+    :root {
+      --blue: #1a4c8b; --blue2: #15397a; --green: #197a4b;
+      --orange: #b35c00; --red: #c0392b; --gray: #666;
+      --bg: #f4f6fb; --border: #e0e4ec;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Pretendard', 'Malgun Gothic', sans-serif; background: #f5f6fa; color: #333; }
+    body { font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+           background: var(--bg); color: #222; font-size: 14px; }
 
+    /* ── 헤더 ── */
     header {
-      background: #1a4c8b;
-      color: #fff;
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      background: var(--blue); color: #fff;
+      padding: 0 20px; height: 52px;
+      display: flex; align-items: center; gap: 12px;
     }
-    header h1 { font-size: 1.2rem; }
-    header .sub { font-size: 0.8rem; opacity: 0.75; margin-top: 2px; }
+    header h1 { font-size: 1.05rem; font-weight: 700; }
+    header .sub { font-size: 0.78rem; opacity: 0.75; }
+    header .spacer { flex: 1; }
 
-    .toolbar {
-      background: #fff;
-      border-bottom: 1px solid #ddd;
-      padding: 10px 24px;
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
+    /* 알람 벨 */
+    .bell-btn {
+      position: relative; background: none; border: none; cursor: pointer;
+      color: #fff; font-size: 1.3rem; padding: 4px 8px;
     }
-    .toolbar label { font-size: 0.82rem; color: #666; }
+    .bell-badge {
+      position: absolute; top: 0; right: 2px;
+      background: #e74c3c; color: #fff;
+      font-size: 0.65rem; font-weight: 700;
+      border-radius: 10px; padding: 1px 5px;
+      display: none;
+    }
+    .bell-badge.show { display: block; }
+
+    /* 알람 드롭다운 */
+    .alert-dropdown {
+      display: none; position: absolute; top: 52px; right: 10px;
+      width: 380px; max-height: 420px; overflow-y: auto;
+      background: #fff; border: 1px solid var(--border);
+      border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.15);
+      z-index: 200;
+    }
+    .alert-dropdown.open { display: block; }
+    .alert-header {
+      padding: 12px 16px; font-weight: 700; font-size: 0.88rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .alert-header button {
+      font-size: 0.75rem; color: var(--gray); background: none;
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 2px 8px; cursor: pointer;
+    }
+    .alert-item {
+      padding: 10px 16px; border-bottom: 1px solid #f0f0f0;
+      cursor: pointer; transition: background .1s;
+    }
+    .alert-item:hover { background: #f5f8ff; }
+    .alert-item .a-title { font-size: 0.85rem; font-weight: 600; line-height: 1.4; }
+    .alert-item .a-meta { font-size: 0.75rem; color: var(--gray); margin-top: 3px; }
+    .alert-empty { padding: 24px; text-align: center; color: var(--gray); font-size: 0.85rem; }
+
+    /* ── 툴바 ── */
+    .toolbar {
+      background: #fff; border-bottom: 1px solid var(--border);
+      padding: 8px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    .toolbar label { font-size: 0.8rem; color: var(--gray); }
     .toolbar select, .toolbar input[type=date], .toolbar input[type=text] {
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 5px 9px;
-      font-size: 0.88rem;
-      font-family: inherit;
+      border: 1px solid #ccc; border-radius: 4px;
+      padding: 5px 9px; font-size: 0.85rem; font-family: inherit;
     }
     .toolbar input[type=text] { width: 180px; }
     .btn {
-      border: none;
-      border-radius: 4px;
-      padding: 6px 14px;
-      cursor: pointer;
-      font-size: 0.88rem;
-      font-family: inherit;
+      border: none; border-radius: 4px; padding: 6px 13px;
+      cursor: pointer; font-size: 0.83rem; font-family: inherit; font-weight: 600;
     }
-    .btn-primary { background: #1a4c8b; color: #fff; }
-    .btn-primary:hover { background: #15397a; }
-    .btn-success { background: #197a4b; color: #fff; }
-    .btn-success:hover { background: #145e39; }
-    .btn-warn { background: #b35c00; color: #fff; }
-    .btn-warn:hover { background: #8c4800; }
-    .btn:disabled { opacity: 0.5; cursor: default; }
-    .sep { width: 1px; height: 24px; background: #ddd; }
+    .btn-primary  { background: var(--blue);   color: #fff; }
+    .btn-primary:hover  { background: var(--blue2); }
+    .btn-success  { background: var(--green);  color: #fff; }
+    .btn-success:hover  { background: #145e39; }
+    .btn-warn     { background: var(--orange); color: #fff; }
+    .btn-warn:hover     { background: #8c4800; }
+    .btn:disabled { opacity: .45; cursor: default; }
+
+    /* 요약 필터 토글 */
+    .summary-filter {
+      display: flex; gap: 4px; border: 1px solid #ccc; border-radius: 4px; overflow: hidden;
+    }
+    .summary-filter button {
+      border: none; background: #f5f5f5; padding: 5px 10px;
+      font-size: 0.8rem; cursor: pointer; font-family: inherit;
+    }
+    .summary-filter button.active { background: var(--blue); color: #fff; }
+
+    .sep { width: 1px; height: 22px; background: var(--border); }
     .total-badge {
-      margin-left: auto;
-      background: #e8f0fe;
-      color: #1a4c8b;
-      border-radius: 12px;
-      padding: 3px 10px;
-      font-size: 0.8rem;
-      font-weight: bold;
+      margin-left: auto; background: #e8f0fe; color: var(--blue);
+      border-radius: 12px; padding: 3px 10px; font-size: 0.78rem; font-weight: 700;
     }
 
-    .layout { display: flex; height: calc(100vh - 105px); overflow: hidden; }
-
-    /* 좌측 목록 */
-    .list-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
-    .table-wrap { flex: 1; overflow-y: auto; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-    }
-    thead { background: #1a4c8b; color: #fff; position: sticky; top: 0; z-index: 1; }
-    th, td { padding: 9px 12px; font-size: 0.85rem; text-align: left; }
-    th { font-weight: 600; }
-    tbody tr { border-bottom: 1px solid #f0f0f0; cursor: pointer; transition: background 0.1s; }
+    /* ── 테이블 ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    thead { background: var(--blue); color: #fff; position: sticky; top: 0; z-index: 1; }
+    th, td { padding: 9px 12px; font-size: 0.83rem; text-align: left; }
+    th { font-weight: 600; white-space: nowrap; }
+    tbody tr { border-bottom: 1px solid #f0f2f7; cursor: pointer; transition: background .1s; }
     tbody tr:hover { background: #f0f5ff; }
-    tbody tr.selected { background: #ddeaff; }
+    tbody tr.new-row { background: #fffbea; }
 
-    .source-tag {
-      display: inline-block;
-      padding: 1px 6px;
-      border-radius: 9px;
-      font-size: 0.74rem;
-      font-weight: bold;
-      white-space: nowrap;
+    .tag {
+      display: inline-block; padding: 1px 7px; border-radius: 10px;
+      font-size: 0.72rem; font-weight: 700; white-space: nowrap;
     }
-    .tag-mohw { background: #e3f0ff; color: #1a4c8b; }
-    .tag-hira { background: #e6f9f0; color: #197a4b; }
-    .tag-category { background: #fff3e0; color: #b35c00; }
-    .has-summary { color: #197a4b; font-weight: bold; font-size: 0.8rem; }
-    .no-summary { color: #bbb; font-size: 0.8rem; }
+    .tag-mohw   { background: #ddeeff; color: var(--blue); }
+    .tag-hira   { background: #ddf4ec; color: var(--green); }
+    .tag-cat    { background: #fff0dc; color: var(--orange); }
+    .has-sum    { color: var(--green); font-weight: 700; font-size: 0.78rem; }
+    .no-sum     { color: #ccc; font-size: 0.78rem; }
 
+    /* 페이지네이션 */
     .pagination {
-      display: flex;
-      gap: 6px;
-      justify-content: center;
-      align-items: center;
-      padding: 10px;
-      background: #fff;
-      border-top: 1px solid #eee;
+      display: flex; gap: 6px; justify-content: center; align-items: center;
+      padding: 10px; background: #fff; border-top: 1px solid var(--border);
     }
     .pagination button {
-      border: 1px solid #ddd;
-      background: #fff;
-      border-radius: 4px;
-      padding: 4px 12px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      font-family: inherit;
+      border: 1px solid #ddd; background: #fff; border-radius: 4px;
+      padding: 4px 12px; cursor: pointer; font-size: 0.83rem; font-family: inherit;
     }
-    .pagination button.active { background: #1a4c8b; color: #fff; border-color: #1a4c8b; }
-    .pagination button:disabled { opacity: 0.4; cursor: default; }
-    .pagination .page-info { font-size: 0.82rem; color: #666; }
-
-    /* 우측 상세 */
-    .detail-panel {
-      width: 380px;
-      min-width: 300px;
-      border-left: 1px solid #ddd;
-      background: #fff;
-      overflow-y: auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .detail-panel .placeholder {
-      color: #aaa;
-      font-size: 0.88rem;
-      text-align: center;
-      margin-top: 60px;
-    }
-    .detail-title { font-size: 1rem; font-weight: bold; line-height: 1.5; color: #1a1a1a; }
-    .detail-meta { display: flex; flex-wrap: wrap; gap: 8px; }
-    .detail-meta span {
-      background: #f0f4f8;
-      border-radius: 4px;
-      padding: 2px 8px;
-      font-size: 0.78rem;
-      color: #555;
-    }
-    .detail-url a {
-      color: #1a4c8b;
-      font-size: 0.82rem;
-      text-decoration: none;
-    }
-    .detail-url a:hover { text-decoration: underline; }
-    .section-label {
-      font-size: 0.8rem;
-      font-weight: bold;
-      color: #1a4c8b;
-      border-bottom: 1px solid #e0e8f5;
-      padding-bottom: 4px;
-    }
-    .summary-box {
-      background: #f8fafb;
-      border-left: 3px solid #1a4c8b;
-      padding: 12px 14px;
-      border-radius: 4px;
-      font-size: 0.84rem;
-      line-height: 1.75;
-      white-space: pre-wrap;
-      color: #333;
-    }
-    .no-summary-msg { color: #aaa; font-size: 0.82rem; font-style: italic; }
-    .attach-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-    .attach-list li a {
-      color: #1a4c8b;
-      font-size: 0.82rem;
-      text-decoration: none;
-    }
-    .attach-list li a:hover { text-decoration: underline; }
+    .pagination button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .pagination button:disabled { opacity: .4; cursor: default; }
+    .pagination .pg-info { font-size: 0.8rem; color: var(--gray); }
 
     /* 상태바 */
     .statusbar {
-      background: #f0f4f8;
-      border-top: 1px solid #ddd;
-      padding: 4px 16px;
-      font-size: 0.78rem;
-      color: #555;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 26px;
+      background: #f0f4f8; border-top: 1px solid var(--border);
+      padding: 4px 16px; font-size: 0.76rem; color: var(--gray);
+      display: flex; align-items: center; gap: 8px; min-height: 24px;
     }
-    .statusbar.error { color: #c0392b; background: #fff5f5; }
-    .statusbar .spinner {
-      width: 12px; height: 12px;
-      border: 2px solid #ccc;
-      border-top-color: #1a4c8b;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      display: none;
+    .statusbar.error { color: var(--red); background: #fff5f5; }
+    .spinner {
+      width: 11px; height: 11px; border: 2px solid #ccc;
+      border-top-color: var(--blue); border-radius: 50%;
+      animation: spin .7s linear infinite; display: none;
     }
     .statusbar.loading .spinner { display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-row td { text-align: center; padding: 40px; color: var(--gray); }
 
-    .loading-row td { text-align: center; padding: 40px; color: #888; }
+    /* ── 팝업 모달 ── */
+    .modal-bg {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 300;
+      align-items: center; justify-content: center;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 10px;
+      width: 720px; max-width: 95vw; max-height: 88vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 8px 40px rgba(0,0,0,.2);
+    }
+    .modal-head {
+      padding: 18px 22px 14px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .modal-head .m-title {
+      flex: 1; font-size: 1rem; font-weight: 700; line-height: 1.5; color: #111;
+    }
+    .modal-head .m-close {
+      background: none; border: none; font-size: 1.4rem;
+      cursor: pointer; color: var(--gray); flex-shrink: 0; margin-top: -2px;
+    }
+    .modal-meta {
+      padding: 8px 22px; display: flex; gap: 8px; flex-wrap: wrap;
+      background: #f8fafb; border-bottom: 1px solid var(--border);
+    }
+    .modal-meta span {
+      background: #eef2f9; border-radius: 4px;
+      padding: 2px 9px; font-size: 0.76rem; color: #444;
+    }
+    .modal-meta a { color: var(--blue); font-size: 0.78rem; text-decoration: none; }
+    .modal-meta a:hover { text-decoration: underline; }
+    .modal-body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+
+    /* 요약 카드 */
+    .summary-card {
+      background: #f7faff;
+      border: 1px solid #c8d8f0;
+      border-left: 4px solid var(--blue);
+      border-radius: 6px; padding: 16px 18px;
+      font-size: 0.87rem; line-height: 1.85;
+      white-space: pre-wrap; color: #222;
+    }
+    .summary-card.emr { border-left-color: var(--green); background: #f6fdf9; }
+    .no-sum-msg { color: var(--gray); font-size: 0.84rem; font-style: italic; }
+
+    /* 첨부파일 */
+    .attach-section { margin-top: 16px; }
+    .attach-section h4 {
+      font-size: 0.8rem; color: var(--blue); font-weight: 700;
+      border-bottom: 1px solid var(--border); padding-bottom: 5px; margin-bottom: 8px;
+    }
+    .attach-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .attach-list li a {
+      color: var(--blue); font-size: 0.82rem; text-decoration: none;
+    }
+    .attach-list li a:hover { text-decoration: underline; }
+
+    /* 섹션 구분자 */
+    .section-divider {
+      font-size: 0.78rem; font-weight: 700; color: var(--blue);
+      border-bottom: 1px solid #dde8f5; padding-bottom: 5px;
+      margin: 16px 0 10px;
+    }
   </style>
 </head>
 <body>
@@ -209,7 +228,20 @@
 <header>
   <div>
     <h1>고시 통합 분석 시스템</h1>
-    <div class="sub">보건복지부 · 건강보험심사평가원 | 2026-03-01 이후</div>
+    <div class="sub">의사랑 EMR · 보건복지부·심사평가원 · 2026-03-01 이후</div>
+  </div>
+  <div class="spacer"></div>
+  <div style="position:relative">
+    <button class="bell-btn" onclick="toggleAlerts()" title="새 고시 알람">🔔
+      <span class="bell-badge" id="bell-badge">0</span>
+    </button>
+    <div class="alert-dropdown" id="alert-dropdown">
+      <div class="alert-header">
+        <span>새 고시 알람</span>
+        <button onclick="markAllRead()">모두 읽음</button>
+      </div>
+      <div id="alert-list"><div class="alert-empty">새 알람이 없습니다</div></div>
+    </div>
   </div>
 </header>
 
@@ -225,66 +257,79 @@
   <input type="date" id="filter-date" value="2026-03-01">
 
   <input type="text" id="filter-keyword" placeholder="제목 검색...">
+
+  <div class="summary-filter">
+    <button id="sf-all"    class="active" onclick="setSummaryFilter('')">전체</button>
+    <button id="sf-done"              onclick="setSummaryFilter('true')">요약완료</button>
+    <button id="sf-none"              onclick="setSummaryFilter('false')">미요약</button>
+  </div>
+
   <button class="btn btn-primary" onclick="loadPage(1)">검색</button>
-
   <div class="sep"></div>
-
-  <button class="btn btn-success" id="btn-crawl" onclick="runTask('crawl')">크롤링 실행</button>
-  <button class="btn btn-warn" id="btn-summarize" onclick="runTask('summarize')">요약 실행</button>
-
+  <button class="btn btn-success" id="btn-crawl"     onclick="runTask('crawl')">크롤링</button>
+  <button class="btn btn-warn"    id="btn-summarize" onclick="runTask('summarize')">요약 실행</button>
   <span class="total-badge" id="total-badge">총 0건</span>
 </div>
 
-<div class="layout">
-  <!-- 목록 -->
-  <div class="list-panel">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:70px">출처</th>
-            <th style="width:75px">구분</th>
-            <th>제목</th>
-            <th style="width:90px">등록일</th>
-            <th style="width:55px">요약</th>
-          </tr>
-        </thead>
-        <tbody id="notice-tbody">
-          <tr class="loading-row"><td colspan="5">데이터를 불러오는 중...</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="pagination" id="pagination"></div>
-  </div>
-
-  <!-- 상세 -->
-  <div class="detail-panel" id="detail-panel">
-    <div class="placeholder">← 고시를 클릭하면<br>상세 정보가 표시됩니다</div>
-  </div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:65px">출처</th>
+        <th style="width:72px">구분</th>
+        <th>제목</th>
+        <th style="width:92px">등록일</th>
+        <th style="width:58px">요약</th>
+      </tr>
+    </thead>
+    <tbody id="notice-tbody">
+      <tr class="loading-row"><td colspan="5">데이터를 불러오는 중...</td></tr>
+    </tbody>
+  </table>
 </div>
+<div class="pagination" id="pagination"></div>
 
 <div class="statusbar" id="statusbar">
   <div class="spinner"></div>
   <span id="status-msg">준비됨</span>
 </div>
 
+<!-- ── 상세 팝업 모달 ── -->
+<div class="modal-bg" id="modal-bg" onclick="onModalBgClick(event)">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="m-title" id="m-title">-</div>
+      <button class="m-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-meta" id="m-meta"></div>
+    <div class="modal-body" id="m-body"></div>
+  </div>
+</div>
+
 <script>
 let currentPage = 1;
 const PAGE_SIZE = 50;
+let summaryFilter = '';  // '' | 'true' | 'false'
 
-// ── 목록 로드 ──────────────────────────────────────────
+// ── 요약 필터 ──────────────────────────────────────────────
+function setSummaryFilter(val) {
+  summaryFilter = val;
+  ['sf-all','sf-done','sf-none'].forEach(id => document.getElementById(id).classList.remove('active'));
+  const map = {'':'sf-all','true':'sf-done','false':'sf-none'};
+  document.getElementById(map[val]).classList.add('active');
+  loadPage(1);
+}
+
+// ── 목록 로드 ──────────────────────────────────────────────
 async function loadPage(page) {
   currentPage = page;
-  const source = document.getElementById('filter-source').value;
-  const fromDate = document.getElementById('filter-date').value;
+  const source  = document.getElementById('filter-source').value;
+  const fromDate= document.getElementById('filter-date').value;
   const keyword = document.getElementById('filter-keyword').value.trim();
 
-  const params = new URLSearchParams({
-    page,
-    page_size: PAGE_SIZE,
-    from_date: fromDate,
-  });
+  const params = new URLSearchParams({page, page_size: PAGE_SIZE, from_date: fromDate});
   if (source) params.set('source', source);
+  if (summaryFilter) params.set('has_summary', summaryFilter);
 
   const tbody = document.getElementById('notice-tbody');
   tbody.innerHTML = '<tr class="loading-row"><td colspan="5">불러오는 중...</td></tr>';
@@ -293,36 +338,31 @@ async function loadPage(page) {
   try {
     const res = await fetch('/api/notices?' + params);
     const data = await res.json();
-
     const notices = data.notices || [];
-    const total = data.total || 0;
-    const pages = data.pages || 1;
+    const total   = data.total || 0;
+    const pages   = data.pages || 1;
 
     document.getElementById('total-badge').textContent = `총 ${total}건`;
 
-    // 키워드 클라이언트 필터
-    const filtered = keyword
-      ? notices.filter(n => n.title.includes(keyword))
-      : notices;
+    const filtered = keyword ? notices.filter(n => n.title.includes(keyword)) : notices;
 
-    if (filtered.length === 0) {
+    if (!filtered.length) {
       tbody.innerHTML = '<tr class="loading-row"><td colspan="5">데이터가 없습니다</td></tr>';
     } else {
       tbody.innerHTML = filtered.map(n => `
-        <tr onclick="openDetail(${n.id}, this)">
-          <td><span class="source-tag tag-${n.source}">${n.source === 'mohw' ? '복지부' : '심평원'}</span></td>
-          <td><span class="source-tag tag-category">${esc(n.category || '-')}</span></td>
+        <tr onclick="openModal(${n.id})">
+          <td><span class="tag tag-${n.source}">${n.source==='mohw'?'복지부':'심평원'}</span></td>
+          <td><span class="tag tag-cat">${esc(n.category||'-')}</span></td>
           <td>${esc(n.title)}</td>
           <td>${n.posted_date}</td>
-          <td class="${n.summary ? 'has-summary' : 'no-summary'}">${n.summary ? '완료' : '-'}</td>
-        </tr>
-      `).join('');
+          <td class="${n.summary?'has-sum':'no-sum'}">${n.summary?'✔':'-'}</td>
+        </tr>`).join('');
     }
 
     renderPagination(page, pages);
     setStatus(`총 ${total}건 · ${page}/${pages} 페이지`);
-  } catch (e) {
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="5">오류: 서버에 연결할 수 없습니다</td></tr>';
+  } catch(e) {
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="5">서버 연결 오류</td></tr>';
     setStatus('서버 연결 오류', 'error');
   }
 }
@@ -330,90 +370,155 @@ async function loadPage(page) {
 function renderPagination(page, pages) {
   const pg = document.getElementById('pagination');
   if (pages <= 1) { pg.innerHTML = ''; return; }
-
-  let html = `<button onclick="loadPage(${page-1})" ${page<=1?'disabled':''}>◀ 이전</button>`;
-  html += `<span class="page-info">${page} / ${pages}</span>`;
-  html += `<button onclick="loadPage(${page+1})" ${page>=pages?'disabled':''}>다음 ▶</button>`;
-  pg.innerHTML = html;
+  pg.innerHTML =
+    `<button onclick="loadPage(${page-1})" ${page<=1?'disabled':''}>◀ 이전</button>` +
+    `<span class="pg-info">${page} / ${pages}</span>` +
+    `<button onclick="loadPage(${page+1})" ${page>=pages?'disabled':''}>다음 ▶</button>`;
 }
 
-// ── 상세 보기 ──────────────────────────────────────────
-async function openDetail(id, row) {
-  // 선택 강조
-  document.querySelectorAll('#notice-tbody tr').forEach(r => r.classList.remove('selected'));
-  if (row) row.classList.add('selected');
-
-  const panel = document.getElementById('detail-panel');
-  panel.innerHTML = '<div class="placeholder">불러오는 중...</div>';
+// ── 모달 팝업 ──────────────────────────────────────────────
+async function openModal(id) {
+  document.getElementById('modal-bg').classList.add('open');
+  document.getElementById('m-title').textContent = '불러오는 중...';
+  document.getElementById('m-meta').innerHTML = '';
+  document.getElementById('m-body').innerHTML = '<div style="padding:30px;color:#888">로딩 중...</div>';
 
   try {
     const res = await fetch('/api/notices/' + id);
     const n = await res.json();
-    renderDetail(n);
-  } catch (e) {
-    panel.innerHTML = '<div class="placeholder">상세 정보를 불러올 수 없습니다</div>';
+    renderModal(n);
+  } catch(e) {
+    document.getElementById('m-body').innerHTML = '<div style="padding:20px;color:red">불러오기 실패</div>';
   }
 }
 
-function renderDetail(n) {
-  const sourceName = n.source === 'mohw' ? '보건복지부' : '건강보험심사평가원';
-  const atts = n.attachments || [];
+function renderModal(n) {
+  const srcName = n.source === 'mohw' ? '보건복지부' : '건강보험심사평가원';
+  document.getElementById('m-title').textContent = n.title.replace(/^새글/, '').trim();
 
-  const attachHtml = atts.length
-    ? `<ul class="attach-list">${atts.map(a =>
-        `<li><a href="${a.download_url}" target="_blank">📎 ${esc(a.filename)}</a></li>`
-      ).join('')}</ul>`
-    : '<span class="no-summary-msg">첨부파일 없음</span>';
-
-  document.getElementById('detail-panel').innerHTML = `
-    <div class="detail-title">${esc(n.title)}</div>
-
-    <div class="detail-meta">
-      <span>${sourceName}</span>
-      ${n.category ? `<span>${esc(n.category)}</span>` : ''}
-      <span>📅 ${n.posted_date}</span>
-      ${n.issued_no ? `<span>관보 ${esc(n.issued_no)}</span>` : ''}
-    </div>
-
-    ${n.detail_url ? `
-      <div class="detail-url">
-        <a href="${n.detail_url}" target="_blank">🔗 원문 보기 ↗</a>
-      </div>` : ''}
-
-    <div class="section-label">■ AI 요약</div>
-    ${n.summary
-      ? `<div class="summary-box">${esc(n.summary)}</div>`
-      : `<span class="no-summary-msg">요약 없음 — [요약 실행] 버튼을 눌러 생성하세요</span>`
-    }
-
-    <div class="section-label">■ 첨부파일</div>
-    ${attachHtml}
+  document.getElementById('m-meta').innerHTML = `
+    <span>${srcName}</span>
+    ${n.category ? `<span>${esc(n.category)}</span>` : ''}
+    <span>📅 ${n.posted_date}</span>
+    ${n.issued_no ? `<span>${esc(n.issued_no)}</span>` : ''}
+    ${n.detail_url ? `<a href="${n.detail_url}" target="_blank">🔗 원문 보기 ↗</a>` : ''}
   `;
+
+  const atts = n.attachments || [];
+  const attHtml = atts.length ? `
+    <div class="attach-section">
+      <h4>■ 첨부파일</h4>
+      <ul class="attach-list">
+        ${atts.map(a => `<li><a href="${a.download_url}" target="_blank">📎 ${esc(a.filename)}</a></li>`).join('')}
+      </ul>
+    </div>` : '';
+
+  let summaryHtml;
+  if (n.summary) {
+    const isEmr = n.summary.includes('EMR') || n.summary.includes('모듈') || n.summary.includes('청구');
+    summaryHtml = `
+      <div class="section-divider">■ 요약 분석 (의사랑 EMR 적용 관점)</div>
+      <div class="summary-card ${isEmr?'emr':''}">${esc(n.summary)}</div>`;
+  } else {
+    summaryHtml = `
+      <div class="section-divider">■ 요약 분석</div>
+      <span class="no-sum-msg">요약 없음 — [요약 실행] 버튼을 눌러 생성하세요</span>`;
+  }
+
+  document.getElementById('m-body').innerHTML = summaryHtml + attHtml;
 }
 
-// ── 크롤링 / 요약 실행 ──────────────────────────────────
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('open');
+}
+function onModalBgClick(e) {
+  if (e.target === document.getElementById('modal-bg')) closeModal();
+}
+
+// ── 알람 ──────────────────────────────────────────────────
+let alertData = [];
+
+async function fetchAlerts() {
+  try {
+    const res = await fetch('/api/alerts');
+    alertData = await res.json();
+    const badge = document.getElementById('bell-badge');
+    if (alertData.length > 0) {
+      badge.textContent = alertData.length > 99 ? '99+' : alertData.length;
+      badge.classList.add('show');
+    } else {
+      badge.classList.remove('show');
+    }
+    renderAlertList();
+  } catch(e) {}
+}
+
+function renderAlertList() {
+  const el = document.getElementById('alert-list');
+  if (!alertData.length) {
+    el.innerHTML = '<div class="alert-empty">새 알람이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = alertData.map(a => `
+    <div class="alert-item" onclick="openAlertNotice(${a.notice_id}, ${a.id})">
+      <div class="a-title">${esc(a.title.replace(/^새글/,''))}</div>
+      <div class="a-meta">${a.source==='mohw'?'보건복지부':'심평원'} · ${a.category||''} · ${a.posted_date}</div>
+    </div>`).join('');
+}
+
+async function openAlertNotice(noticeId, alertId) {
+  document.getElementById('alert-dropdown').classList.remove('open');
+  await markAlertRead([alertId]);
+  openModal(noticeId);
+}
+
+async function markAlertRead(ids) {
+  await fetch('/api/alerts/read', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ids})
+  });
+  await fetchAlerts();
+}
+
+async function markAllRead() {
+  const ids = alertData.map(a => a.id);
+  await markAlertRead(ids);
+  document.getElementById('alert-dropdown').classList.remove('open');
+}
+
+function toggleAlerts() {
+  const dd = document.getElementById('alert-dropdown');
+  dd.classList.toggle('open');
+}
+
+// 외부 클릭 시 알람 닫기
+document.addEventListener('click', e => {
+  const dd = document.getElementById('alert-dropdown');
+  if (!e.target.closest('.bell-btn') && !e.target.closest('.alert-dropdown')) {
+    dd.classList.remove('open');
+  }
+});
+
+// ── 크롤링/요약 실행 ──────────────────────────────────────
 async function runTask(task) {
   const label = task === 'crawl' ? '크롤링' : 'AI 요약';
-  const btnId = task === 'crawl' ? 'btn-crawl' : 'btn-summarize';
-  const btn = document.getElementById(btnId);
-
-  btn.disabled = true;
   document.getElementById('btn-crawl').disabled = true;
   document.getElementById('btn-summarize').disabled = true;
-  setStatus(`${label} 실행 중... (완료까지 시간이 걸릴 수 있습니다)`, 'loading');
+  setStatus(`${label} 실행 중... (잠시 기다려주세요)`, 'loading');
 
   try {
-    const res = await fetch(`/api/run/${task}`, { method: 'POST' });
+    const res = await fetch(`/api/run/${task}`, {method:'POST'});
     const data = await res.json();
-
     if (data.exit_code === 0) {
       setStatus(`${label} 완료`);
       loadPage(1);
+      fetchAlerts();
     } else {
-      setStatus(`${label} 오류 (종료코드 ${data.exit_code})`, 'error');
-      alert(`${label} 실패:\n\n${data.output?.slice(-500) || '출력 없음'}`);
+      setStatus(`${label} 오류`, 'error');
+      alert(`${label} 실패:\n\n${(data.output||'').slice(-500)}`);
     }
-  } catch (e) {
+  } catch(e) {
     setStatus(`${label} 요청 실패`, 'error');
   } finally {
     document.getElementById('btn-crawl').disabled = false;
@@ -421,26 +526,27 @@ async function runTask(task) {
   }
 }
 
-// ── 유틸 ────────────────────────────────────────────────
-function setStatus(msg, type = '') {
+// ── 유틸 ──────────────────────────────────────────────────
+function setStatus(msg, type='') {
   const bar = document.getElementById('statusbar');
-  bar.className = 'statusbar' + (type ? ' ' + type : '');
+  bar.className = 'statusbar' + (type ? ' '+type : '');
   document.getElementById('status-msg').textContent = msg;
 }
-
 function esc(s) {
-  return String(s ?? '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
+  return String(s??'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// 엔터키로 검색
 document.getElementById('filter-keyword').addEventListener('keydown', e => {
   if (e.key === 'Enter') loadPage(1);
 });
 
 // 초기 로드
 loadPage(1);
+fetchAlerts();
+// 30초마다 알람 폴링
+setInterval(fetchAlerts, 30000);
 </script>
 </body>
 </html>

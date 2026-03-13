@@ -179,7 +179,27 @@ def _local_summarize(title: str, content: str) -> str:
     # 아직도 없으면 제목 기반 설명
     if not lines:
         lines.append(f"📄 **문서 유형**\n{_title_based_desc(title)}")
-        lines.append("ℹ️ *이 문서는 비교표·목록 형식으로 구성되어 자동 요약이 어렵습니다.*\n원문을 직접 확인하거나 Claude API 키를 설정하면 AI 요약이 가능합니다.")
+
+    # EMR 적용 관련 키워드가 본문에 있으면 추출
+    emr_hits = []
+    emr_keywords = {
+        '수가': '수가코드 변경 가능성 — 청구 모듈 확인 필요',
+        '청구': '청구 관련 변경 — 청구 모듈 검토 필요',
+        '처방': '처방 관련 변경 — 처방 모듈 검토 필요',
+        '서식': '서식 변경 — EMR 입력 화면 수정 필요',
+        '기재': '기재 항목 변경 — 입력 양식 수정 필요',
+        '전산': '전산 시스템 변경 요구 가능성',
+        '코드': '코드 체계 변경 — 코드 테이블 업데이트 필요',
+        '인터페이스': '인터페이스 변경 — 연동 시스템 확인 필요',
+        '신고': '신고 관련 — 관련 신고 기능 확인 필요',
+    }
+    for kw, msg in emr_keywords.items():
+        if kw in text:
+            emr_hits.append(f"• {msg}")
+    if emr_hits:
+        lines.append("🏥 **EMR 검토 포인트** (키워드 감지)\n" + '\n'.join(emr_hits[:4]))
+
+    lines.append("ℹ️ *Claude API 키를 설정하면 EMR 적용사항을 상세히 분석합니다.*")
 
     return '\n\n'.join(lines)
 
@@ -194,24 +214,37 @@ def _claude_summarize(title: str, content: str, api_key: str) -> str:
         text = text[:7000] + "\n\n...(중략)...\n\n" + text[-2000:]
 
     client = anthropic.Anthropic(api_key=api_key)
-    prompt = f"""다음은 보건의료 분야의 고시/지침/훈령 문서입니다.
+    prompt = f"""당신은 "의사랑" EMR(전자의무기록) 시스템의 PM입니다.
+아래 보건의료 고시/지침 문서를 읽고, EMR 제품 운영·개발 관점에서 실무적으로 정리해 주세요.
 
 제목: {title}
 
 내용:
 {text}
 
-아래 항목 중 해당되는 것만 골라 간결하게 요약하세요. 없는 항목은 생략하세요.
+다음 항목 중 해당하는 것만 작성하세요 (없으면 생략):
 
-📌 **개정이유** (한 줄)
-📋 **주요내용** (핵심만 bullet 2~4개)
-👥 **적용 대상** (한 줄)
-📅 **시행일** (한 줄)"""
+📌 **개정이유 / 배경** (1~2줄)
+
+📋 **EMR 적용 필요 사항**
+- (수가코드·청구코드 변경이 있으면 명시)
+- (입력 서식·필수 항목 변경이 있으면 명시)
+- (기능 추가·수정이 필요한 모듈 명시: 처방/수납/청구/기록 등)
+- (데이터 연동·인터페이스 변경 필요 여부)
+
+⚠️ **주의사항 / 리스크**
+- (미적용 시 청구 오류·법적 문제 등)
+
+📅 **시행일 및 대응 기한**
+- (언제까지 EMR에 반영해야 하는지)
+
+👥 **적용 대상 기관**
+- (어떤 의료기관이 해당되는지)"""
 
     try:
         message = client.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=600,
+            max_tokens=1000,
             messages=[{"role": "user", "content": prompt}]
         )
         return message.content[0].text
